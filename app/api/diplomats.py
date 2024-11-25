@@ -122,8 +122,8 @@ def update_diplomat(id):
             values.append(data['circuit'])
         
         if 'arrival_date' in data:
-            update_fields.append("arrival_date = %s")
-            values.append(data['arrival_date'])
+            update_fields.append("expected_departure_date = %s")
+            values.append(data['expected_departure_date'])
         
         if 'touristic_guide' in data:
             update_fields.append("touristic_guide = %s")

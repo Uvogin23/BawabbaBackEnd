@@ -375,3 +375,63 @@ def get_counts_last_12_months_citizens():
 
 
 
+@stats_bp.route('/api/stats/bardata', methods=['GET'])
+def get_counts_current_year():
+    cursor = mysql.connection.cursor()
+
+    # Get the current year
+    current_year = datetime.now().year
+
+    # Queries for each table
+    queries = {
+         "الدبلوماسيون": f"SELECT COUNT(*) FROM diplomats WHERE YEAR(arrival_date) = {current_year}",
+        "السياح الأجانب": f"SELECT COUNT(*) FROM tourists WHERE YEAR(arrival_date) = {current_year}",
+        "السياح الجزائريون": f"SELECT COUNT(*) FROM algerian_tourists WHERE YEAR(arrival_date) = {current_year}",
+        "المرافقون": f"SELECT COUNT(*) FROM diplomat_accompaniment WHERE YEAR(arrival_date) = {current_year}",
+        "الدخول": f"SELECT COUNT(*) FROM non_residents WHERE YEAR(arrival_date) = {current_year}",
+        "الخروج": f"SELECT COUNT(*) FROM citizens WHERE YEAR(exit_date) = {current_year}"
+    }
+
+    # Execute queries and collect results
+    results = {}
+    for table, query in queries.items():
+        cursor.execute(query)
+        count = cursor.fetchone()[0]
+        results[table] = count
+
+    return jsonify(results)
+
+@stats_bp.route('/api/stats/last-two/entre', methods=['GET'])
+def get_last_two_entre():
+    try:
+        cur = mysql.connection.cursor()
+        
+        # Query to fetch the last two entries
+        query = "SELECT * FROM non_residents ORDER BY id DESC LIMIT 2"
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        return jsonify(results)
+
+        
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@stats_bp.route('/api/stats/last-two/sortie', methods=['GET'])
+def get_last_two_sortie():
+    try:
+        cur = mysql.connection.cursor()
+        
+        # Query to fetch the last two entries
+        query = "SELECT * FROM citizens ORDER BY id DESC LIMIT 2"
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        return jsonify(results)
+
+        
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
