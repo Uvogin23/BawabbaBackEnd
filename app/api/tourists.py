@@ -374,3 +374,26 @@ def get_last_two_tourists():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@tourists_bp.route('/api/countries', methods=['GET'])
+def get_countries():
+    try:
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT id, alpha_2, alpha_3, name FROM countries")
+        countries = cursor.fetchall()
+        
+        # Convert query results into a list of dictionaries
+        country_list = []
+        for country in countries:
+            country_list.append({
+                'id': country[0],
+                'alpha_2': country[1],
+                'alpha_3': country[2],
+                'name': country[3]
+            })
+
+        cursor.close()
+        return jsonify(country_list), 200
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching countries", "error": str(e)}), 500
