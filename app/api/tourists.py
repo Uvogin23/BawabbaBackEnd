@@ -54,6 +54,8 @@ def get_tourist(id):
                 'touristic_guide': tourist[14],
                 'msg_ref': tourist[15],
                 'created_at': tourist[16]
+                
+
             }
             return jsonify(tourist_data), 200
         else:
@@ -61,6 +63,101 @@ def get_tourist(id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+
+@tourists_bp.route('/api/tourists/still_in_city', methods=['GET'])
+def get_tourists_still_in_city():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+            t.*,
+            tdl.dep_msg_ref  
+        FROM 
+            tourists t
+        LEFT JOIN 
+            tourist_departure_logs tdl
+        ON 
+            t.id = tdl.tourist_id
+        WHERE 
+            tdl.tourist_id IS NULL
+            AND t.expected_departure_date NOT IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+        """
+        cursor.execute(query)
+        tourists = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in tourists]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
+    
+@tourists_bp.route('/api/tourists/supposed_to_leave', methods=['GET'])
+def get_tourists_supposed_to_leave():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+                t.*,
+                tdl.dep_msg_ref  
+            FROM 
+                tourists t
+            LEFT JOIN 
+                tourist_departure_logs tdl 
+            ON 
+                t.id = tdl.tourist_id
+            WHERE 
+                tdl.tourist_id IS NULL
+                AND t.expected_departure_date IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+        """
+        cursor.execute(query)
+        tourists = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in tourists]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
+    
+@tourists_bp.route('/api/tourists/history', methods=['GET'])
+def get_tourists_history():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+    t.*,
+    tdl.dep_msg_ref  
+FROM 
+    tourists t
+INNER JOIN 
+    tourist_departure_logs tdl 
+ON 
+    t.id = tdl.tourist_id;
+
+        """
+        cursor.execute(query)
+        tourists = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in tourists]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
+    
+
+
 
 # Add a single tourist
 @tourists_bp.route('/api/tourists/Add', methods=['POST'])
@@ -364,7 +461,22 @@ def get_last_two_tourists():
         cur = mysql.connection.cursor()
         
         # Query to fetch the last two entries
-        query = "SELECT * FROM tourists ORDER BY id DESC LIMIT 2"
+        query = """
+        SELECT 
+    t.*, 
+    NULL AS dep_msg_ref
+FROM 
+    tourists t
+LEFT JOIN 
+    tourist_departure_logs tdl 
+ON 
+    t.id = tdl.tourist_id
+WHERE 
+    tdl.tourist_id IS NULL
+ORDER BY 
+    t.id DESC
+LIMIT 2;
+"""
         cur.execute(query)
         results = cur.fetchall()
         cur.close()
@@ -397,3 +509,37 @@ def get_countries():
 
     except Exception as e:
         return jsonify({"msg": "Error fetching countries", "error": str(e)}), 500
+
+@tourists_bp.route('/api/tourists/add_departure_log', methods=['POST'])
+def add_departure_log():
+    data = request.json
+    
+    # Extract values from the request
+    tourist_id = data.get('tourist_id')
+    departure_method = data.get('departure_method')
+    departure_time = data.get('departure_time')
+    dep_msg_ref = data.get('dep_msg_ref')
+
+    # Ensure all required fields are provided
+    if not tourist_id or not departure_method or not departure_time:
+        return jsonify({"msg": "tourist_id, departure_method, and departure_time are required!"}), 400
+    
+    try:
+        cursor = mysql.connection.cursor()
+        
+        # Insert data into tourist_departure_logs table
+        insert_query = """
+            INSERT INTO tourist_departure_logs (tourist_id, departure_method, departure_time, dep_msg_ref)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (tourist_id, departure_method, departure_time, dep_msg_ref))
+        
+        # Commit the transaction
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"msg": "Departure log added successfully!"}), 201
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return jsonify({"msg": "Error adding departure log!", "error": str(e)}), 500

@@ -179,28 +179,22 @@ def get_counts_last_12_months_algerian():
 
     # SQL query to include all months even with count 0
     query = """
-    SELECT 
-        month_list.month,
-        IFNULL(COUNT(t.arrival_date), 0) AS total_count
-    FROM 
-        (
-            SELECT '2023-11' AS month
-            UNION ALL SELECT '2023-12'
-            UNION ALL SELECT '2024-01'
-            UNION ALL SELECT '2024-02'
-            UNION ALL SELECT '2024-03'
-            UNION ALL SELECT '2024-04'
-            UNION ALL SELECT '2024-05'
-            UNION ALL SELECT '2024-06'
-            UNION ALL SELECT '2024-07'
-            UNION ALL SELECT '2024-08'
-            UNION ALL SELECT '2024-09'
-            UNION ALL SELECT '2024-10'
-        ) AS month_list
-    LEFT JOIN algerian_tourists t
-        ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
-    GROUP BY month_list.month
-    ORDER BY month_list.month ASC;
+    WITH RECURSIVE month_list AS (
+    SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') AS month
+    UNION ALL
+    SELECT DATE_FORMAT(DATE_SUB(STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d'), INTERVAL 1 MONTH), '%Y-%m')
+    FROM month_list
+    WHERE STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d') > DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+)
+SELECT 
+    month_list.month,
+    IFNULL(COUNT(t.arrival_date), 0) AS total_count
+FROM 
+    month_list
+LEFT JOIN algerian_tourists t
+    ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
+GROUP BY month_list.month
+ORDER BY month_list.month ASC;
     """
 
     # Execute the query
@@ -219,28 +213,22 @@ def get_counts_last_12_months_tourists():
 
     # SQL query to include all months even with count 0
     query = """
-    SELECT 
-        month_list.month,
-        IFNULL(COUNT(t.arrival_date), 0) AS total_count
-    FROM 
-        (
-            SELECT '2023-11' AS month
-            UNION ALL SELECT '2023-12'
-            UNION ALL SELECT '2024-01'
-            UNION ALL SELECT '2024-02'
-            UNION ALL SELECT '2024-03'
-            UNION ALL SELECT '2024-04'
-            UNION ALL SELECT '2024-05'
-            UNION ALL SELECT '2024-06'
-            UNION ALL SELECT '2024-07'
-            UNION ALL SELECT '2024-08'
-            UNION ALL SELECT '2024-09'
-            UNION ALL SELECT '2024-10'
-        ) AS month_list
-    LEFT JOIN tourists t
-        ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
-    GROUP BY month_list.month
-    ORDER BY month_list.month ASC;
+    WITH RECURSIVE month_list AS (
+    SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') AS month
+    UNION ALL
+    SELECT DATE_FORMAT(DATE_SUB(STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d'), INTERVAL 1 MONTH), '%Y-%m')
+    FROM month_list
+    WHERE STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d') > DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+)
+SELECT 
+    month_list.month,
+    IFNULL(COUNT(t.arrival_date), 0) AS total_count
+FROM 
+    month_list
+LEFT JOIN tourists t
+    ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
+GROUP BY month_list.month
+ORDER BY month_list.month ASC;
     """
 
     # Execute the query
@@ -259,28 +247,22 @@ def get_counts_last_12_months_diplomats():
 
     # SQL query to include all months even with count 0
     query = """
-    SELECT 
-        month_list.month,
-        IFNULL(COUNT(t.arrival_date), 0) AS total_count
-    FROM 
-        (
-            SELECT '2023-11' AS month
-            UNION ALL SELECT '2023-12'
-            UNION ALL SELECT '2024-01'
-            UNION ALL SELECT '2024-02'
-            UNION ALL SELECT '2024-03'
-            UNION ALL SELECT '2024-04'
-            UNION ALL SELECT '2024-05'
-            UNION ALL SELECT '2024-06'
-            UNION ALL SELECT '2024-07'
-            UNION ALL SELECT '2024-08'
-            UNION ALL SELECT '2024-09'
-            UNION ALL SELECT '2024-10'
-        ) AS month_list
-    LEFT JOIN diplomats t
-        ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
-    GROUP BY month_list.month
-    ORDER BY month_list.month ASC;
+    WITH RECURSIVE month_list AS (
+    SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') AS month
+    UNION ALL
+    SELECT DATE_FORMAT(DATE_SUB(STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d'), INTERVAL 1 MONTH), '%Y-%m')
+    FROM month_list
+    WHERE STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d') > DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+)
+SELECT 
+    month_list.month,
+    IFNULL(COUNT(t.arrival_date), 0) AS total_count
+FROM 
+    month_list
+LEFT JOIN diplomats t
+    ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
+GROUP BY month_list.month
+ORDER BY month_list.month ASC;
     """
 
     # Execute the query
@@ -299,28 +281,22 @@ def get_counts_last_12_months_residents():
 
     # SQL query to include all months even with count 0
     query = """
-    SELECT 
-        month_list.month,
-        IFNULL(COUNT(t.arrival_date), 0) AS total_count
-    FROM 
-        (
-            SELECT '2023-11' AS month
-            UNION ALL SELECT '2023-12'
-            UNION ALL SELECT '2024-01'
-            UNION ALL SELECT '2024-02'
-            UNION ALL SELECT '2024-03'
-            UNION ALL SELECT '2024-04'
-            UNION ALL SELECT '2024-05'
-            UNION ALL SELECT '2024-06'
-            UNION ALL SELECT '2024-07'
-            UNION ALL SELECT '2024-08'
-            UNION ALL SELECT '2024-09'
-            UNION ALL SELECT '2024-10'
-        ) AS month_list
-    LEFT JOIN non_residents t
-        ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
-    GROUP BY month_list.month
-    ORDER BY month_list.month ASC;
+    WITH RECURSIVE month_list AS (
+    SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') AS month
+    UNION ALL
+    SELECT DATE_FORMAT(DATE_SUB(STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d'), INTERVAL 1 MONTH), '%Y-%m')
+    FROM month_list
+    WHERE STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d') > DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+)
+SELECT 
+    month_list.month,
+    IFNULL(COUNT(t.arrival_date), 0) AS total_count
+FROM 
+    month_list
+LEFT JOIN non_residents t
+    ON DATE_FORMAT(t.arrival_date, '%Y-%m') = month_list.month
+GROUP BY month_list.month
+ORDER BY month_list.month ASC;
     """
 
     # Execute the query
@@ -339,29 +315,23 @@ def get_counts_last_12_months_citizens():
 
     # SQL query to include all months even with count 0
     query = """
-    SELECT 
-        month_list.month,
-        IFNULL(COUNT(t.exit_date), 0) AS total_count
-    FROM 
-        (
-            SELECT '2023-11' AS month
-            UNION ALL SELECT '2023-12'
-            UNION ALL SELECT '2024-01'
-            UNION ALL SELECT '2024-02'
-            UNION ALL SELECT '2024-03'
-            UNION ALL SELECT '2024-04'
-            UNION ALL SELECT '2024-05'
-            UNION ALL SELECT '2024-06'
-            UNION ALL SELECT '2024-07'
-            UNION ALL SELECT '2024-08'
-            UNION ALL SELECT '2024-09'
-            UNION ALL SELECT '2024-10'
-        ) AS month_list
-    LEFT JOIN citizens t
-        ON DATE_FORMAT(t.exit_date, '%Y-%m') = month_list.month
-    GROUP BY month_list.month
-    ORDER BY month_list.month ASC;
-    """
+    WITH RECURSIVE month_list AS (
+    SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m') AS month
+    UNION ALL
+    SELECT DATE_FORMAT(DATE_SUB(STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d'), INTERVAL 1 MONTH), '%Y-%m')
+    FROM month_list
+    WHERE STR_TO_DATE(CONCAT(month, '-01'), '%Y-%m-%d') > DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+)
+SELECT 
+    month_list.month,
+    IFNULL(COUNT(t.exit_date), 0) AS total_count
+FROM 
+    month_list
+LEFT JOIN citizens t
+    ON DATE_FORMAT(t.exit_date, '%Y-%m') = month_list.month
+GROUP BY month_list.month
+ORDER BY month_list.month ASC;
+   """
 
     # Execute the query
     cursor.execute(query)
