@@ -20,11 +20,31 @@ mysql = MySQL(app)
 # Retrieve all tourists
 @tourists_bp.route('/api/tourists', methods=['GET'])
 def get_tourists():
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM tourists")
-    results = cur.fetchall()
-    cur.close()
-    return jsonify(results), 200
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        t.*, 
+        tdl.dep_msg_ref  
+        FROM 
+        tourists t
+        LEFT JOIN 
+        tourist_departure_logs tdl 
+        ON 
+        t.id = tdl.tourist_id;
+        """
+        cursor.execute(query)
+        tourists = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in tourists]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
 
 # Retrieve a single tourist by ID
 @tourists_bp.route('/api/tourists/<int:id>', methods=['GET'])
@@ -64,7 +84,6 @@ def get_tourist(id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-
 @tourists_bp.route('/api/tourists/still_in_city', methods=['GET'])
 def get_tourists_still_in_city():
     try:
@@ -134,15 +153,14 @@ def get_tourists_history():
         
         query = """
         SELECT 
-    t.*,
-    tdl.dep_msg_ref  
-FROM 
-    tourists t
-INNER JOIN 
-    tourist_departure_logs tdl 
-ON 
-    t.id = tdl.tourist_id;
-
+        t.*,
+        tdl.dep_msg_ref  
+        FROM 
+        tourists t
+        INNER JOIN 
+        tourist_departure_logs tdl 
+        ON 
+        t.id = tdl.tourist_id;
         """
         cursor.execute(query)
         tourists = cursor.fetchall()
@@ -156,9 +174,6 @@ ON
     except Exception as e:
         return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
     
-
-
-
 # Add a single tourist
 @tourists_bp.route('/api/tourists/Add', methods=['POST'])
 def add_tourist():
@@ -308,104 +323,97 @@ def get_tourists_by_country(nationality):
         return jsonify({"error": str(e)}), 500
 
 # Filter tourists
-@tourists_bp.route('/api/tourists/filter', methods=['GET'])
+@tourists_bp.route('/api/tourists/filter', methods=['POST'])
 def filter_tourists():
     try:
-        cur = mysql.connection.cursor()
+        # Get JSON data from the request
+        data = request.get_json()
 
-        # Get filter parameters from the request
-        first_name = request.args.get('first_name')
-        last_name = request.args.get('last_name')
-        nationality = request.args.get('nationality')
-        arrival_date_start = request.args.get('arrival_date_start')
-        arrival_date_end = request.args.get('arrival_date_end')
-        expected_departure_date_start = request.args.get('expected_departure_date_start')
-        expected_departure_date_end = request.args.get('expected_departure_date_end')
-        receiving_agency = request.args.get('receiving_agency')
-        arrival_flight_info = request.args.get('arrival_flight_info')
-        touristic_guide = request.args.get('touristic_guide')
+        # Extract filter parameters
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        nationality = data.get('nationality')
+        arrival_date_start = data.get('arrival_date_start')
+        arrival_date_end = data.get('arrival_date_end')
+        receiving_agency = data.get('receiving_agency')
+        arrival_flight_info = data.get('arrival_flight_info')
+        msg_ref = data.get('msg_ref')
 
-        # Start building the SQL query
-        query = "SELECT * FROM tourists WHERE 1=1"
+        # Initialize SQL query
+        query = """
+            SELECT 
+                t.*, 
+                tdl.dep_msg_ref
+            FROM 
+                tourists t
+            LEFT JOIN 
+                tourist_departure_logs tdl
+            ON 
+                t.id = tdl.tourist_id
+            WHERE 1=1
+        """
         filters = []
 
-        # Add filters based on provided parameters
-
+        # Add filters to the query
         if first_name:
-            query += " AND first_name = %s"
+            query += " AND t.first_name = %s"
             filters.append(first_name)
 
         if last_name:
-            query += " AND last_name = %s"
+            query += " AND t.last_name = %s"
             filters.append(last_name)
-                    
+
         if nationality:
-            query += " AND nationality = %s"
+            query += " AND t.nationality = %s"
             filters.append(nationality)
 
         if arrival_date_start and arrival_date_end:
-            # Convert to date format for SQL query
             try:
                 arrival_date_start = datetime.strptime(arrival_date_start, '%Y-%m-%d').date()
                 arrival_date_end = datetime.strptime(arrival_date_end, '%Y-%m-%d').date()
-                query += " AND arrival_date BETWEEN %s AND %s"
+                query += " AND t.arrival_date BETWEEN %s AND %s"
                 filters.extend([arrival_date_start, arrival_date_end])
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
-        if expected_departure_date_start and expected_departure_date_end:
-            # Convert to date format for SQL query
-            try:
-                expected_departure_date_start = datetime.strptime(expected_departure_date_start, '%Y-%m-%d').date()
-                expected_departure_date_end = datetime.strptime(expected_departure_date_end, '%Y-%m-%d').date()
-                query += " AND expected_departure_date BETWEEN %s AND %s"
-                filters.extend([expected_departure_date_start, expected_departure_date_end])
-            except ValueError:
-                return jsonify({"error": "Invalid date format for expected_departure_date. Use YYYY-MM-DD."}), 400
-
         if receiving_agency:
-            query += " AND receiving_agency = %s"
+            query += " AND t.receiving_agency = %s"
             filters.append(receiving_agency)
 
         if arrival_flight_info:
-            query += " AND arrival_flight_info LIKE %s"
-            filters.append(f"%{arrival_flight_info}%")  # Use LIKE for partial match
+            query += " AND t.arrival_flight_info LIKE %s"
+            filters.append(f"%{arrival_flight_info}%")
 
-        if touristic_guide:
-            query += " AND touristic_guide = %s"
-            filters.append(touristic_guide)
+        if msg_ref:
+            query += " AND t.msg_ref = %s"
+            filters.append(msg_ref)
 
-        # Log the constructed query and filter values for debugging
-        print("Constructed SQL Query:", query)
-        print("Filters:", filters)
-
-        # Execute the final query with filters
+        # Execute the query
+        cur = mysql.connection.cursor()
         cur.execute(query, tuple(filters))
         results = cur.fetchall()
 
-        # Fetching column names
-        column_names = [desc[0] for desc in cur.description]
-        tourists = [dict(zip(column_names, row)) for row in results]
+        # Transform the results into a nested list
+        results_list = [list(row) for row in results]
 
         cur.close()
-        return jsonify(tourists), 200
+        return jsonify(results_list), 200  # Return the nested list
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-#retrieving monthly counts of tourists
-@tourists_bp.route('/api/tourists/monthly-counts', methods=['GET'])
+
+@tourists_bp.route('/api/tourists/monthly_counts', methods=['GET'])
 def get_tourist_monthly_counts():
     try:
         year = request.args.get('year')
         
         # Validate the year parameter
-        if not year or not year.isdigit() or int(year) < 1900 or int(year) > datetime.now().year:
+        if not year or not year.isdigit() or int(year) < 2023 or int(year) > datetime.now().year + 1:
             return jsonify({"error": "Invalid year parameter. Please provide a valid year."}), 400
         
         year = int(year)
 
-        # Prepare the SQL query to get the monthly counts of tourists grouped by country
+        # Prepare the SQL query to get counts grouped by month and nationality
         query = """
             SELECT MONTH(arrival_date) AS month, nationality, COUNT(*) AS count
             FROM tourists
@@ -418,42 +426,42 @@ def get_tourist_monthly_counts():
         cur.execute(query, (year,))
         results = cur.fetchall()
 
-        # Fetching column names
-        column_names = [desc[0] for desc in cur.description]
-
-        # Create a structured response
-        monthly_counts = {}
+        # Initialize the response structure
+        country_monthly_data = {}
         grand_total = 0
-        
         for row in results:
-            month = row[0]
-            nationality = row[1]
-            count = row[2]
+            month, nationality, count = row
 
-            if nationality not in monthly_counts:
-                monthly_counts[nationality] = {
-                    'monthly_counts': [0] * 12,  # Initialize a list for 12 months
-                    'total': 0  # Initialize total count for the nationality
-                }
+            # Ensure every country is initialized
+            if nationality not in country_monthly_data:
+                country_monthly_data[nationality] = {m: 0 for m in range(1, 13)}  # Default to 0 for all months
 
-            # Update monthly counts and total
-            monthly_counts[nationality]['monthly_counts'][month - 1] += count  # Month is 1-indexed
-            monthly_counts[nationality]['total'] += count
+            # Update the count for the specific month
+            country_monthly_data[nationality][month] += count
             grand_total += count
 
         cur.close()
 
         # Prepare the final response format
         response_data = {
-            "monthly_counts": monthly_counts,
-            "grand_total": grand_total
+            "countries": []
         }
+
+        # Add data for each country
+        for nationality, months in country_monthly_data.items():
+            response_data["countries"].append({
+                "nationality": nationality,
+                "monthly_counts": [months[month] for month in range(1, 13)],
+                "total": sum(months.values())
+            })
+
+        # Add the grand total
+        response_data["grand_total"] = grand_total
 
         return jsonify(response_data), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @tourists_bp.route('/api/tourists/last-two', methods=['GET'])
 def get_last_two_tourists():
@@ -486,29 +494,6 @@ LIMIT 2;
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-@tourists_bp.route('/api/countries', methods=['GET'])
-def get_countries():
-    try:
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT id, alpha_2, alpha_3, name FROM countries")
-        countries = cursor.fetchall()
-        
-        # Convert query results into a list of dictionaries
-        country_list = []
-        for country in countries:
-            country_list.append({
-                'id': country[0],
-                'alpha_2': country[1],
-                'alpha_3': country[2],
-                'name': country[3]
-            })
-
-        cursor.close()
-        return jsonify(country_list), 200
-
-    except Exception as e:
-        return jsonify({"msg": "Error fetching countries", "error": str(e)}), 500
 
 @tourists_bp.route('/api/tourists/add_departure_log', methods=['POST'])
 def add_departure_log():
