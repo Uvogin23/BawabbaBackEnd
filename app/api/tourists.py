@@ -172,7 +172,7 @@ def get_tourists_history():
         return jsonify(result), 200  # Directly return the list
 
     except Exception as e:
-        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
+        return jsonify({"msg": "Error fetching tourists ", "error": str(e)}), 500
     
 # Add a single tourist
 @tourists_bp.route('/api/tourists/Add', methods=['POST'])

@@ -20,52 +20,152 @@ mysql = MySQL(app)
 # Retrieve all diplomats
 @diplomats_bp.route('/api/diplomats', methods=['GET'])
 def get_data():
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM diplomats")
-    results = cur.fetchall()
-    cur.close()
-    return jsonify(results)
-
-# Retrieve a single diplomat by ID
-@diplomats_bp.route('/api/diplomats/<int:id>', methods=['GET'])
-def get_diplomat(id):
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM diplomats WHERE id = %s", (id,))
-        diplomat = cur.fetchone()
-        cur.close()
-
-        if diplomat:
-            diplomat_data = {
-                'id': diplomat[0],
-                'first_name': diplomat[1],
-                'last_name': diplomat[2],
-                'date_of_birth': diplomat[3],
-                'place_of_birth': diplomat[4],
-                'passport_number': diplomat[5],
-                'passport_expiry': diplomat[6],
-                'diplomatic_card_number': diplomat[7],
-                'fonction': diplomat[8],
-                'nationality': diplomat[9],
-                'receiving_agency': diplomat[10],
-                'circuit': diplomat[11],
-                'arrival_date': diplomat[12],
-                'expected_departure_date': diplomat[13],
-                'arrival_flight_info': diplomat[14],
-                'departure_flight_info': diplomat[15],
-                'touristic_guide': diplomat[16],
-                'created_at': diplomat[17],
-                'msg_ref': diplomat[18]
-            }
-            return jsonify(diplomat_data), 200
-        else:
-            return jsonify({'message': 'Diplomat not found'}), 404
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        d.*, 
+        ddl.dep_msg_ref  
+        FROM 
+        diplomats d
+        LEFT JOIN 
+        diplomat_departure_logs ddl 
+        ON 
+        d.id = ddl.diplomat_id;
+        """
+        cursor.execute(query)
+        diplomats = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in diplomats]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"msg": "Error fetching diplomats ", "error": str(e)}), 500
+
+@diplomats_bp.route('/api/diplomats/still_in_city', methods=['GET'])
+def get_diplomats_still_in_city():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+            d.*,
+            ddl.dep_msg_ref  
+        FROM 
+            diplomats d
+        LEFT JOIN 
+            diplomat_departure_logs ddl
+        ON 
+            d.id = ddl.diplomat_id
+        WHERE 
+            ddl.diplomat_id IS NULL
+            AND d.expected_departure_date NOT IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+        """
+        cursor.execute(query)
+        diplomats = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in diplomats]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching diplomats", "error": str(e)}), 500
+
+@diplomats_bp.route('/api/diplomats/supposed_to_leave', methods=['GET'])
+def get_diplomats_supposed_to_leave():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+                d.*,
+                ddl.dep_msg_ref  
+            FROM 
+                diplomats d
+            LEFT JOIN 
+                diplomat_departure_logs ddl 
+            ON 
+                d.id = ddl.diplomat_id
+            WHERE 
+                ddl.diplomat_id IS NULL
+                AND d.expected_departure_date IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+        """
+        cursor.execute(query)
+        diplomats = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in diplomats]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
+
+@diplomats_bp.route('/api/diplomats/history', methods=['GET'])
+def get_diplomats_history():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        d.*,
+        ddl.dep_msg_ref  
+        FROM 
+        diplomats d
+        INNER JOIN 
+        diplomat_departure_logs ddl 
+        ON 
+        d.id = ddl.diplomat_id;
+        """
+        cursor.execute(query)
+        diplomats = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in diplomats]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching diplomats ", "error": str(e)}), 500
+
+# Retrieve a single diplomat by ID
+@diplomats_bp.route('/api/diplomats/last', methods=['GET'])
+def get_last_diplomat_id():
+    try:
+        # Query to get the last inserted diplomat's ID
+        query = """
+            SELECT id 
+            FROM diplomats 
+            ORDER BY id DESC 
+            LIMIT 1
+        """
+
+        cur = mysql.connection.cursor()
+        cur.execute(query)
+        result = cur.fetchone()
+        cur.close()
+
+        if result:
+            # If a result is found, return the ID
+            last_id = result[0]
+            return jsonify({"last_id": last_id}), 200
+        else:
+            # If no diplomats exist in the table
+            return jsonify({"message": "No diplomats found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Add a single diplomat
-@diplomats_bp.route('/api/diplomats', methods=['POST'])
+@diplomats_bp.route('/api/diplomats/add', methods=['POST'])
 def add_diplomat():
     data = request.json
     try:
@@ -121,10 +221,18 @@ def update_diplomat(id):
             update_fields.append("circuit = %s")
             values.append(data['circuit'])
         
-        if 'arrival_date' in data:
+        if 'expected_departure_date' in data:
             update_fields.append("expected_departure_date = %s")
             values.append(data['expected_departure_date'])
         
+        if 'arrival_flight_info' in data:
+            update_fields.append("arrival_flight_info = %s")
+            values.append(data['arrival_flight_info'])
+
+        if 'departure_flight_info' in data:
+            update_fields.append("departure_flight_info = %s")
+            values.append(data['departure_flight_info'])
+
         if 'touristic_guide' in data:
             update_fields.append("touristic_guide = %s")
             values.append(data['touristic_guide'])
@@ -210,103 +318,78 @@ def get_diplomats_by_country(nationality):
 @diplomats_bp.route('/api/diplomats/filter', methods=['GET'])
 def filter_diplomats():
     try:
-        cur = mysql.connection.cursor()
-        
-        # Get filter parameters from the request
-        first_name = request.args.get('first_name')
-        last_name = request.args.get('last_name')
-        nationality = request.args.get('nationality')
-        arrival_date_start = request.args.get('arrival_date_start')
-        arrival_date_end = request.args.get('arrival_date_end')
-        expected_departure_date_start = request.args.get('expected_departure_date_start')
-        expected_departure_date_end = request.args.get('expected_departure_date_end')
-        receiving_agency = request.args.get('receiving_agency')
-        arrival_flight_info = request.args.get('arrival_flight_info')
-        touristic_guide = request.args.get('touristic_guide')
+        data = request.get_json()
+
+        # Extract filter parameters
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        nationality = data.get('nationality')
+        arrival_date_start = data.get('arrival_date_start')
+        arrival_date_end = data.get('arrival_date_end')
+        receiving_agency = data.get('receiving_agency')
+        arrival_flight_info = data.get('arrival_flight_info')
+        msg_ref = data.get('msg_ref')
 
         # Start building the SQL query
-        query = "SELECT * FROM diplomats WHERE 1=1"
+        query = """
+            SELECT 
+                d.*, 
+                ddl.dep_msg_ref
+            FROM 
+                diplomats d
+            LEFT JOIN 
+                diplomat_departure_logs ddl
+            ON 
+                d.id = ddl.diplomat_id
+            WHERE 1=1
+        """
         filters = []
 
         # Add filters based on provided parameters
 
         if first_name:
-            query += " AND first_name = %s"
+            query += " AND d.first_name = %s"
             filters.append(first_name)
 
         if last_name:
-            query += " AND last_name = %s"
+            query += " AND d.last_name = %s"
             filters.append(last_name)
 
         if nationality:
-            query += " AND nationality = %s"
+            query += " AND d.nationality = %s"
             filters.append(nationality)
 
         if arrival_date_start and arrival_date_end:
-            # Convert to date format for SQL query
             try:
                 arrival_date_start = datetime.strptime(arrival_date_start, '%Y-%m-%d').date()
                 arrival_date_end = datetime.strptime(arrival_date_end, '%Y-%m-%d').date()
-                query += " AND arrival_date BETWEEN %s AND %s"
+                query += " AND d.arrival_date BETWEEN %s AND %s"
                 filters.extend([arrival_date_start, arrival_date_end])
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
-        if expected_departure_date_start and expected_departure_date_end:
-            # Convert to date format for SQL query
-            try:
-                expected_departure_date_start = datetime.strptime(expected_departure_date_start, '%Y-%m-%d').date()
-                expected_departure_date_end = datetime.strptime(expected_departure_date_end, '%Y-%m-%d').date()
-                query += " AND expected_departure_date BETWEEN %s AND %s"
-                filters.extend([expected_departure_date_start, expected_departure_date_end])
-            except ValueError:
-                return jsonify({"error": "Invalid date format for expected_departure_date. Use YYYY-MM-DD."}), 400
-
         if receiving_agency:
-            query += " AND receiving_agency = %s"
+            query += " AND d.receiving_agency = %s"
             filters.append(receiving_agency)
 
         if arrival_flight_info:
-            query += " AND arrival_flight_info LIKE %s"
-            filters.append(f"%{arrival_flight_info}%")  # Use LIKE for partial match
+            query += " AND d.arrival_flight_info LIKE %s"
+            filters.append(f"%{arrival_flight_info}%")
 
-        if touristic_guide:
-            query += " AND touristic_guide = %s"
-            filters.append(touristic_guide)
+        if msg_ref:
+            query += " AND d.msg_ref = %s"
+            filters.append(msg_ref)
 
-        # Log the constructed query and filter values for debugging
-        print("Constructed SQL Query:", query)
-        print("Filters:", filters)
-
-        # Execute the final query with filters
+        # Execute the query
+        cur = mysql.connection.cursor()
         cur.execute(query, tuple(filters))
         results = cur.fetchall()
 
-        # Fetching column names
-        column_names = [desc[0] for desc in cur.description]
-
-        # Create a list of dictionaries for each diplomat
-        diplomats = []
-        for row in results:
-            diplomat = dict(zip(column_names, row))
-            diplomats.append(diplomat)
-
-        # Count total number of diplomats
-        total_count = len(diplomats)
-
-        # Count number of diplomats from each country
-        nationality_counts = Counter(diplomat['nationality'] for diplomat in diplomats)
+        # Transform the results into a nested list
+        results_list = [list(row) for row in results]
 
         cur.close()
-
-        # Create the response data structure
-        response_data = {
-            "total_diplomats": total_count,
-            "nationality_counts": dict(nationality_counts),
-            "diplomats": diplomats
-        }
-
-        return jsonify(response_data), 200
+        return jsonify(results_list), 200  # Return the nested list
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -317,7 +400,7 @@ def get_monthly_counts():
         year = request.args.get('year')
         
         # Validate the year parameter
-        if not year or not year.isdigit() or int(year) < 1900 or int(year) > datetime.now().year:
+        if not year or not year.isdigit() or int(year) < 2023 or int(year) > datetime.now().year + 1:
             return jsonify({"error": "Invalid year parameter. Please provide a valid year."}), 400
         
         year = int(year)
@@ -335,36 +418,36 @@ def get_monthly_counts():
         cur.execute(query, (year,))
         results = cur.fetchall()
 
-        # Fetching column names
-        column_names = [desc[0] for desc in cur.description]
-
-        # Create a structured response
-        monthly_counts = {}
+        country_monthly_data = {}
         grand_total = 0
-        
         for row in results:
-            month = row[0]
-            nationality = row[1]
-            count = row[2]
+            month, nationality, count = row
 
-            if nationality not in monthly_counts:
-                monthly_counts[nationality] = {
-                    'monthly_counts': [0] * 12,  # Initialize a list for 12 months
-                    'total': 0  # Initialize total count for the nationality
-                }
+            # Ensure every country is initialized
+            if nationality not in country_monthly_data:
+                country_monthly_data[nationality] = {m: 0 for m in range(1, 13)}  # Default to 0 for all months
 
-            # Update monthly counts and total
-            monthly_counts[nationality]['monthly_counts'][month - 1] += count  # Month is 1-indexed
-            monthly_counts[nationality]['total'] += count
+            # Update the count for the specific month
+            country_monthly_data[nationality][month] += count
             grand_total += count
 
         cur.close()
 
         # Prepare the final response format
         response_data = {
-            "monthly_counts": monthly_counts,
-            "grand_total": grand_total
+            "countries": []
         }
+
+        # Add data for each country
+        for nationality, months in country_monthly_data.items():
+            response_data["countries"].append({
+                "nationality": nationality,
+                "monthly_counts": [months[month] for month in range(1, 13)],
+                "total": sum(months.values())
+            })
+
+        # Add the grand total
+        response_data["grand_total"] = grand_total
 
         return jsonify(response_data), 200
 
@@ -409,7 +492,22 @@ def get_last_two_diplomats():
         cur = mysql.connection.cursor()
         
         # Query to fetch the last two entries
-        query = "SELECT * FROM diplomats ORDER BY id DESC LIMIT 2"
+        query = """
+        SELECT 
+        d.*, 
+        NULL AS dep_msg_ref
+        FROM 
+        diplomats d
+        LEFT JOIN 
+        diplomat_departure_logs ddl 
+        ON 
+        d.id = ddl.diplomat_id
+        WHERE 
+        ddl.diplomat_id IS NULL
+        ORDER BY 
+        d.id DESC
+        LIMIT 2;
+        """
         cur.execute(query)
         results = cur.fetchall()
         cur.close()
@@ -420,5 +518,66 @@ def get_last_two_diplomats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-    
+@diplomats_bp.route('/api/diplomats/<int:diplomat_id>/tourists', methods=['GET'])
+def get_tourists_by_diplomat(diplomat_id):
+    try:
+        cur = mysql.connection.cursor()
 
+        # SQL Query to fetch tourists associated with the given diplomat_id
+        query = """
+            SELECT 
+                t.*, 
+                tdl.dep_msg_ref 
+            FROM 
+                tourists t
+            LEFT JOIN 
+                diplomat_tourists dt ON t.id = dt.tourist_id
+            LEFT JOIN 
+                tourist_departure_logs tdl ON t.id = tdl.tourist_id
+            WHERE 
+                dt.diplomat_id = %s
+        """
+        
+        cur.execute(query, (diplomat_id,))
+        results = cur.fetchall()
+
+        # Return results as a list of lists
+        cur.close()
+        return jsonify(results), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500    
+
+@diplomats_bp.route('/api/dipomats/add_departure_log', methods=['POST'])
+def add_departure_log():
+    data = request.json
+    
+    # Extract values from the request
+    diplomat_id = data.get('diplomat_id')
+    departure_method = data.get('departure_method')
+    departure_time = data.get('departure_time')
+    dep_msg_ref = data.get('dep_msg_ref')
+
+    # Ensure all required fields are provided
+    if not diplomat_id or not departure_method or not departure_time:
+        return jsonify({"msg": "diplomat_id, departure_method, and departure_time are required!"}), 400
+    
+    try:
+        cursor = mysql.connection.cursor()
+        
+        # Insert data into tourist_departure_logs table
+        insert_query = """
+            INSERT INTO diplomat_departure_logs (diplomat_id, departure_method, departure_time, dep_msg_ref)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (diplomat_id, departure_method, departure_time, dep_msg_ref))
+        
+        # Commit the transaction
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"msg": "Departure log added successfully!"}), 201
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return jsonify({"msg": "Error adding departure log!", "error": str(e)}), 500
