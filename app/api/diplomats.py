@@ -53,17 +53,17 @@ def get_diplomats_still_in_city():
         
         query = """
         SELECT 
-            d.*,
-            ddl.dep_msg_ref  
-        FROM 
-            diplomats d
-        LEFT JOIN 
-            diplomat_departure_logs ddl
-        ON 
-            d.id = ddl.diplomat_id
-        WHERE 
-            ddl.diplomat_id IS NULL
-            AND d.expected_departure_date NOT IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+    d.*,
+    ddl.dep_msg_ref  
+FROM 
+    diplomats d
+LEFT JOIN 
+    diplomat_departure_logs ddl
+ON 
+    d.id = ddl.diplomat_id
+WHERE 
+    ddl.diplomat_id IS NULL
+    AND d.expected_departure_date > CURDATE();
         """
         cursor.execute(query)
         diplomats = cursor.fetchall()
@@ -84,17 +84,17 @@ def get_diplomats_supposed_to_leave():
         
         query = """
         SELECT 
-                d.*,
-                ddl.dep_msg_ref  
-            FROM 
-                diplomats d
-            LEFT JOIN 
-                diplomat_departure_logs ddl 
-            ON 
-                d.id = ddl.diplomat_id
-            WHERE 
-                ddl.diplomat_id IS NULL
-                AND d.expected_departure_date IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+    d.*,
+    ddl.dep_msg_ref  
+FROM 
+    diplomats d
+LEFT JOIN 
+    diplomat_departure_logs ddl 
+ON 
+    d.id = ddl.diplomat_id
+WHERE 
+    ddl.diplomat_id IS NULL
+    AND (d.expected_departure_date <= CURDATE());
         """
         cursor.execute(query)
         diplomats = cursor.fetchall()
@@ -315,7 +315,7 @@ def get_diplomats_by_country(nationality):
 
 
 #flter diplomats
-@diplomats_bp.route('/api/diplomats/filter', methods=['GET'])
+@diplomats_bp.route('/api/diplomats/filter', methods=['POST'])
 def filter_diplomats():
     try:
         data = request.get_json()

@@ -101,7 +101,7 @@ def get_tourists_still_in_city():
             t.id = tdl.tourist_id
         WHERE 
             tdl.tourist_id IS NULL
-            AND t.expected_departure_date NOT IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+            AND t.expected_departure_date > CURDATE();
         """
         cursor.execute(query)
         tourists = cursor.fetchall()
@@ -132,7 +132,7 @@ def get_tourists_supposed_to_leave():
                 t.id = tdl.tourist_id
             WHERE 
                 tdl.tourist_id IS NULL
-                AND t.expected_departure_date IN (CURDATE(), DATE_SUB(CURDATE(), INTERVAL 1 DAY));
+                AND (t.expected_departure_date <= CURDATE());
         """
         cursor.execute(query)
         tourists = cursor.fetchall()
@@ -199,6 +199,62 @@ def add_tourist():
 
     except Exception as e:
         return jsonify({'error': 'Failed to add tourist'}), 500
+
+#Add tourists associated with diplomats
+@tourists_bp.route('/api/tourists/AddTD', methods=['POST'])
+def add_tourist_dip():
+    data = request.json
+    try:
+        cur = mysql.connection.cursor()
+
+        # Step 1: Add a new tourist
+        cur.execute("""
+            INSERT INTO tourists (
+                first_name, last_name, date_of_birth, place_of_birth, passport_number, passport_expiry,
+                nationality, receiving_agency, circuit, arrival_date, expected_departure_date,
+                arrival_flight_info, departure_flight_info, touristic_guide, msg_ref
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data['first_name'], data['last_name'], data['date_of_birth'], data['place_of_birth'],
+            data['passport_number'], data['passport_expiry'], data['nationality'],
+            data['receiving_agency'], data['circuit'], data['arrival_date'], 
+            data['expected_departure_date'], data['arrival_flight_info'], 
+            data['departure_flight_info'], data['touristic_guide'], data['msg_ref']
+        ))
+        mysql.connection.commit()
+
+        # Get the ID of the newly added tourist
+        tourist_id = cur.lastrowid
+
+        # Step 2: Fetch the last diplomat ID
+        cur.execute("SELECT id FROM diplomats ORDER BY id DESC LIMIT 1")
+        diplomat = cur.fetchone()
+
+        if diplomat:
+            # If the query returns a row, extract the diplomat ID
+            diplomat_id = diplomat[0] if isinstance(diplomat, tuple) else diplomat['id']
+
+            # Step 3: Insert into the diplomat_tourists table
+            cur.execute("""
+                INSERT INTO diplomat_tourists (diplomat_id, tourist_id)
+                VALUES (%s, %s)
+            """, (diplomat_id, tourist_id))
+            mysql.connection.commit()
+
+            cur.close()
+
+            return jsonify({
+                'message': 'Tourist added and association created successfully!',
+                'last_diplomat_id': diplomat_id,
+                'new_tourist_id': tourist_id
+            }), 201
+
+        else:
+            cur.close()
+            return jsonify({'error': 'No diplomats found in the database. Cannot associate tourist.'}), 404
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Delete a tourist by ID
 @tourists_bp.route('/api/tourists/Delete/<int:id>', methods=['DELETE'])
