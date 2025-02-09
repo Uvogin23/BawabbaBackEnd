@@ -44,45 +44,7 @@ def get_tourists():
         return jsonify(result), 200  # Directly return the list
 
     except Exception as e:
-        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
-
-# Retrieve a single tourist by ID
-@tourists_bp.route('/api/tourists/<int:id>', methods=['GET'])
-def get_tourist(id):
-    try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM tourists WHERE id = %s", (id,))
-        tourist = cur.fetchone()
-        cur.close()
-
-        if tourist:
-            tourist_data = {
-                'id': tourist[0],
-                'first_name': tourist[1],
-                'last_name': tourist[2],
-                'date_of_birth': tourist[3],
-                'place_of_birth': tourist[4],
-                'passport_number': tourist[5],
-                'passport_expiry': tourist[6],
-                'nationality': tourist[7],
-                'receiving_agency': tourist[8],
-                'circuit': tourist[9],
-                'arrival_date': tourist[10],
-                'expected_departure_date': tourist[11],
-                'arrival_flight_info': tourist[12],
-                'departure_flight_info': tourist[13],
-                'touristic_guide': tourist[14],
-                'msg_ref': tourist[15],
-                'created_at': tourist[16]
-                
-
-            }
-            return jsonify(tourist_data), 200
-        else:
-            return jsonify({'message': 'Tourist not found'}), 404
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"msg": "Error fetching tourists ", "error": str(e)}), 500
     
 @tourists_bp.route('/api/tourists/still_in_city', methods=['GET'])
 def get_tourists_still_in_city():
@@ -518,6 +480,7 @@ def get_tourist_monthly_counts():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
 
 @tourists_bp.route('/api/tourists/last-two', methods=['GET'])
 def get_last_two_tourists():
@@ -527,20 +490,20 @@ def get_last_two_tourists():
         # Query to fetch the last two entries
         query = """
         SELECT 
-    t.*, 
-    NULL AS dep_msg_ref
-FROM 
-    tourists t
-LEFT JOIN 
-    tourist_departure_logs tdl 
-ON 
-    t.id = tdl.tourist_id
-WHERE 
-    tdl.tourist_id IS NULL
-ORDER BY 
-    t.id DESC
-LIMIT 2;
-"""
+        t.*, 
+        NULL AS dep_msg_ref
+        FROM 
+        tourists t
+        LEFT JOIN 
+        tourist_departure_logs tdl 
+        ON 
+        t.id = tdl.tourist_id
+        WHERE 
+        tdl.tourist_id IS NULL
+        ORDER BY 
+        t.id DESC
+        LIMIT 2;
+        """
         cur.execute(query)
         results = cur.fetchall()
         cur.close()

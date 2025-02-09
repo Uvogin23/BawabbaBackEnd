@@ -22,50 +22,91 @@ mysql = MySQL(app)
 @non_residents_bp.route('/api/non_residents', methods=['GET'])
 def get_all_non_residents():
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM non_residents")
-        results = cur.fetchall()
-        cur.close()
-        return jsonify(results), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        cursor = mysql.connection.cursor()
+        query = """
+        SELECT 
+        n.*, 
+        ndl.dep_msg_ref  
+        FROM 
+        non_residents n
+        LEFT JOIN 
+        non_resident_departure_logs ndl 
+        ON 
+        n.id = ndl.non_resident_id;
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
 
-#Retrieve a Single Non-Resident by ID   
-@non_residents_bp.route('/api/non_residents/<int:id>', methods=['GET'])
-def get_non_resident(id):
+    except Exception as e:
+        return jsonify({"msg": "Error fetching non_residents ", "error": str(e)}), 500
+
+@non_residents_bp.route('/api/non_residents/still_in_city', methods=['GET'])
+def get_non_residents_still_in_city():
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM non_residents WHERE id = %s", (id,))
-        non_resident = cur.fetchone()
-        cur.close()
-
-        if non_resident:
-            non_resident_data = {
-                'id': non_resident[0],
-                'first_name': non_resident[1],
-                'last_name': non_resident[2],
-                'date_of_birth': non_resident[3],
-                'place_of_birth': non_resident[4],
-                'passport_number': non_resident[5],
-                'passport_expiry': non_resident[6],
-                'nationality': non_resident[7],
-                'host': non_resident[8],
-                'purpose_of_visit': non_resident[9],
-                'arrival_date': non_resident[10],
-                'expected_departure_date': non_resident[11],
-                'vehicle_information': non_resident[12],
-                'message_reference': non_resident[13],
-                'observations': non_resident[14],
-                'created_at': non_resident[15],
-                'msg_ref': non_resident[16],
-            }
-            return jsonify(non_resident_data), 200
-        else:
-            return jsonify({'message': 'Non-resident not found'}), 404
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+            n.*,
+            ndl.dep_msg_ref  
+        FROM 
+            non_residents n
+        LEFT JOIN 
+            non_resident_departure_logs ndl
+        ON 
+            n.id = ndl.non_resident_id
+        WHERE 
+            ndl.non_resident_id IS NULL
+            AND n.expected_departure_date > CURDATE();
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"msg": "Error fetching non_residents still in the city", "error": str(e)}), 500
 
+@non_residents_bp.route('/api/non_residents/supposed_to_leave', methods=['GET'])
+def get_non_residents_supposed_to_leave():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+                n.*,
+                ndl.dep_msg_ref  
+            FROM 
+                non_residents n
+            LEFT JOIN 
+                non_resident_departure_logs ndl 
+            ON 
+                n.id = ndl.non_resident_id
+            WHERE 
+                ndl.non_resident_id IS NULL
+                AND (n.expected_departure_date <= CURDATE());
+        """
+        cursor.execute(query)
+        tourists = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in tourists]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching tourists still in the city", "error": str(e)}), 500
 
 #Add a New Non-Resident
 @non_residents_bp.route('/api/non_residents/Add', methods=['POST'])
@@ -77,16 +118,14 @@ def add_non_resident():
             INSERT INTO non_residents (
                 first_name, last_name, date_of_birth, place_of_birth, passport_number,
                 passport_expiry, nationality, host, purpose_of_visit, arrival_date,
-                expected_departure_date, vehicle_information, message_reference,
-                observations, msg_ref
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                expected_departure_date, vehicle_information, observations, msg_ref
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             data['first_name'], data['last_name'], data['date_of_birth'], 
             data.get('place_of_birth'), data['passport_number'], data.get('passport_expiry'),
             data.get('nationality'), data.get('host'), data.get('purpose_of_visit'),
             data['arrival_date'], data.get('expected_departure_date'),
-            data.get('vehicle_information'), data.get('message_reference'),
-            data.get('observations'), data.get('msg_ref')
+            data.get('vehicle_information'), data.get('observations'), data.get('msg_ref')
         ))
         mysql.connection.commit()
         cur.close()
@@ -95,6 +134,33 @@ def add_non_resident():
     except Exception as e:
         return jsonify({'error': 'Failed to add non-resident'}), 500
 
+@non_residents_bp.route('/api/non_residents/history', methods=['GET'])
+def get_non_residents_history():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        n.*,
+        ndl.dep_msg_ref  
+        FROM 
+        non_residents n
+        INNER JOIN 
+        non_resident_departure_logs ndl 
+        ON 
+        n.id = ndl.non_resident_id;
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching non_residents ", "error": str(e)}), 500
 
 #Update a Non-Resident by ID
 @non_residents_bp.route('/api/non_residents/Update/<int:id>', methods=['PUT'])
@@ -122,13 +188,21 @@ def update_non_resident(id):
             update_fields.append("vehicle_information = %s")
             values.append(data['vehicle_information'])
 
-        if 'message_reference' in data:
-            update_fields.append("message_reference = %s")
-            values.append(data['message_reference'])
-
         if 'observations' in data:
+            # Fetch the current value of observations
+            cur = mysql.connection.cursor()
+            cur.execute("SELECT observations FROM non_residents WHERE id = %s", (id,))
+            current_observations = cur.fetchone()
+            cur.close()
+
+            # Append the new observations to the existing ones
+            if current_observations and current_observations[0]:
+                updated_observations = current_observations[0] + " " + data['observations']
+            else:
+                updated_observations = data['observations']
+
             update_fields.append("observations = %s")
-            values.append(data['observations'])
+            values.append(updated_observations)
 
         if 'msg_ref' in data:
             update_fields.append("msg_ref = %s")
@@ -168,84 +242,100 @@ def delete_non_resident(id):
         return jsonify({'error': str(e)}), 500
     
 #Filter Non-Residents
-@non_residents_bp.route('/api/non_residents/filter', methods=['GET'])
+@non_residents_bp.route('/api/non_residents/filter', methods=['POST'])
 def filter_non_residents():
     try:
-        cur = mysql.connection.cursor()
-        
-        # Get filter parameters from the request
-        first_name = request.args.get('first_name')
-        last_name = request.args.get('last_name')
-        nationality = request.args.get('nationality')
-        msg_ref = request.args.get('msg_ref')
-        arrival_date_start = request.args.get('arrival_date_start')
-        arrival_date_end = request.args.get('arrival_date_end')
+        # Get JSON data from the request
+        data = request.get_json()
 
-        # Start building the SQL query
-        query = "SELECT * FROM non_residents WHERE 1=1"
+        # Extract filter parameters
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        nationality = data.get('nationality')
+        arrival_date_start = data.get('arrival_date_start')
+        arrival_date_end = data.get('arrival_date_end')
+        host = data.get('host')
+        purpose_of_visit = data.get('purpose_of_visit')
+        msg_ref = data.get('msg_ref')
+
+        # Initialize SQL query
+        query = """
+            SELECT 
+                n.*, 
+                ndl.dep_msg_ref
+            FROM 
+                non_residents n
+            LEFT JOIN 
+                non_resident_departure_logs ndl
+            ON 
+                n.id = ndl.non_resident_id
+            WHERE 1=1
+        """
         filters = []
 
-        # Add filters based on provided parameters
+        # Add filters to the query
         if first_name:
-            query += " AND first_name = %s"
+            query += " AND n.first_name = %s"
             filters.append(first_name)
 
         if last_name:
-            query += " AND last_name = %s"
+            query += " AND n.last_name = %s"
             filters.append(last_name)
-            
+
         if nationality:
-            query += " AND nationality = %s"
+            query += " AND n.nationality = %s"
             filters.append(nationality)
 
-        if msg_ref:
-            query += " AND msg_ref = %s"
-            filters.append(msg_ref)
-
         if arrival_date_start and arrival_date_end:
-            # Convert to date format for SQL query
             try:
                 arrival_date_start = datetime.strptime(arrival_date_start, '%Y-%m-%d').date()
                 arrival_date_end = datetime.strptime(arrival_date_end, '%Y-%m-%d').date()
-                query += " AND arrival_date BETWEEN %s AND %s"
+                query += " AND n.arrival_date BETWEEN %s AND %s"
                 filters.extend([arrival_date_start, arrival_date_end])
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
-        # Log the constructed query and filter values for debugging
-        print("Constructed SQL Query:", query)
-        print("Filters:", filters)
+        if host:
+            query += " AND n.host = %s"
+            filters.append(host)
 
-        # Execute the final query with filters
+        if purpose_of_visit:
+            query += " AND n.purpose_of_visit LIKE %s"
+            filters.append(f"%{purpose_of_visit}%")
+
+        if msg_ref:
+            query += " AND n.msg_ref = %s"
+            filters.append(msg_ref)
+
+        # Execute the query
+        cur = mysql.connection.cursor()
         cur.execute(query, tuple(filters))
         results = cur.fetchall()
 
-        # Check if results are empty and return appropriate message
-        if not results:
-            return jsonify({"message": "No non-residents found matching the criteria"}), 404
-
-        # Fetching column names for easier parsing
-        column_names = [desc[0] for desc in cur.description]
-
-        # Create a list of dictionaries for each non-resident
-        non_residents = [dict(zip(column_names, row)) for row in results]
-
-        # Count total number of non-residents
-        total_count = len(non_residents)
-
-        # Count number of non-residents from each country
-        nationality_counts = Counter(non_resident['nationality'] for non_resident in non_residents)
+        # Transform the results into a nested list
+        results_list = [list(row) for row in results]
 
         cur.close()
+        return jsonify(results_list), 200  # Return the nested list
 
-        # Create the response data structure
-        response_data = {
-            "total_non_residents": total_count,
-            "nationality_counts": dict(nationality_counts),
-            "non_residents": non_residents
-        }
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-        return jsonify(response_data), 200
+@non_residents_bp.route('/api/non_residents/counts', methods=['GET'])
+def get_tourist_counts():
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("""
+            SELECT nationality, COUNT(*) AS count
+            FROM non_residents
+            GROUP BY nationality
+            ORDER BY count DESC;
+        """)
+        results = cur.fetchall()
+        tourist_counts = [{'nationality': row[0], 'count': row[1]} for row in results]
+
+        cur.close()
+        return jsonify(tourist_counts), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -255,44 +345,128 @@ def filter_non_residents():
 def get_non_residents_monthly_counts():
     try:
         year = request.args.get('year')
-
+        
         # Validate the year parameter
-        if not year or not year.isdigit() or int(year) < 1900 or int(year) > datetime.now().year:
+        if not year or not year.isdigit() or int(year) < 2023 or int(year) > datetime.now().year + 1:
             return jsonify({"error": "Invalid year parameter. Please provide a valid year."}), 400
         
         year = int(year)
 
-        # Prepare the SQL query to get the monthly counts of non-residents
+        # Prepare the SQL query to get counts grouped by month and nationality
         query = """
-            SELECT MONTH(arrival_date) AS month, COUNT(*) AS count
+            SELECT MONTH(arrival_date) AS month, nationality, COUNT(*) AS count
             FROM non_residents
             WHERE YEAR(arrival_date) = %s
-            GROUP BY month
-            ORDER BY month
+            GROUP BY month, nationality
+            ORDER BY nationality, month
         """
 
         cur = mysql.connection.cursor()
         cur.execute(query, (year,))
         results = cur.fetchall()
+
+        # Initialize the response structure
+        country_monthly_data = {}
+        grand_total = 0
+        for row in results:
+            month, nationality, count = row
+
+            # Ensure every country is initialized
+            if nationality not in country_monthly_data:
+                country_monthly_data[nationality] = {m: 0 for m in range(1, 13)}  # Default to 0 for all months
+
+            # Update the count for the specific month
+            country_monthly_data[nationality][month] += count
+            grand_total += count
+
         cur.close()
 
-        # Structure response data
-        monthly_counts = {i: 0 for i in range(1, 13)}  # Initialize months with zero counts
-        total_count = 0
-
-        for row in results:
-            month = row[0]
-            count = row[1]
-            monthly_counts[month] = count
-            total_count += count
-
+        # Prepare the final response format
         response_data = {
-            "year": year,
-            "monthly_counts": monthly_counts,
-            "total_count": total_count
+            "countries": []
         }
+
+        # Add data for each country
+        for nationality, months in country_monthly_data.items():
+            response_data["countries"].append({
+                "nationality": nationality,
+                "monthly_counts": [months[month] for month in range(1, 13)],
+                "total": sum(months.values())
+            })
+
+        # Add the grand total
+        response_data["grand_total"] = grand_total
 
         return jsonify(response_data), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@non_residents_bp.route('/api/non_residents/last-two', methods=['GET'])
+def get_last_two_non_residents():
+    try:
+        cur = mysql.connection.cursor()
+        
+        # Query to fetch the last two entries
+        query = """
+        SELECT 
+    n.*,
+    ndl.dep_msg_ref,
+    ndl.departure_time   
+    FROM 
+    non_residents n
+    LEFT JOIN 
+    non_resident_departure_logs ndl 
+    ON 
+    n.id = ndl.non_resident_id
+    ORDER BY 
+    n.id DESC
+    LIMIT 2;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@non_residents_bp.route('/api/non_residents/add_departure_log', methods=['POST'])
+def add_departure_log():
+    data = request.json
+    
+    # Extract values from the request
+    non_resident_id = data.get('non_resident_id')
+    departure_method = data.get('observations')
+    departure_time = data.get('departure_time')
+    dep_msg_ref = data.get('dep_msg_ref')
+
+    # Ensure all required fields are provided
+    if not non_resident_id :
+        return jsonify({"msg": "non_resident_id  is required!"}), 400
+    
+    if not departure_method:
+         return jsonify({"msg": " departure_method is required!"}), 400
+
+    if not departure_time:
+         return jsonify({"msg": "departure_time is required!"}), 400
+    
+    try:
+        cursor = mysql.connection.cursor()
+        
+        # Insert data into non_resident_departure_logs table
+        insert_query = """
+            INSERT INTO non_resident_departure_logs (non_resident_id, departure_method, departure_time, dep_msg_ref)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (non_resident_id, departure_method, departure_time, dep_msg_ref))
+        
+        # Commit the transaction
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"msg": "Departure log added successfully!"}), 201
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return jsonify({"msg": "Error adding departure log!", "error": str(e)}), 500

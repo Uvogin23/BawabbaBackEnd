@@ -22,49 +22,125 @@ mysql = MySQL(app)
 @citizens_bp.route('/api/citizens', methods=['GET'])
 def get_all_citizens():
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM citizens")
-        results = cur.fetchall()
-        cur.close()
-        return jsonify(results), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        cursor = mysql.connection.cursor()
+        query = """
+        SELECT 
+        c.*, 
+        cdl.dep_msg_ref,
+        cdl.departure_time   
+        FROM 
+        citizens c
+        LEFT JOIN 
+        citizen_departure_logs cdl 
+        ON 
+        c.id = cdl. citizen_id;
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
 
-# Retrieve a single citizen by ID
-@citizens_bp.route('/api/citizens/<int:id>', methods=['GET'])
-def get_citizen(id):
+    except Exception as e:
+        return jsonify({"msg": "Error fetching citizens ", "error": str(e)}), 500
+    
+@citizens_bp.route('/api/citizens/still_out', methods=['GET'])
+def get_citizens_stillOut():
     try:
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM citizens WHERE id = %s", (id,))
-        citizen = cur.fetchone()
-        cur.close()
-
-        if citizen:
-            citizen_data = {
-                'id': citizen[0],
-                'first_name': citizen[1],
-                'last_name': citizen[2],
-                'date_of_birth': citizen[3],
-                'place_of_birth': citizen[4],
-                'passport_number': citizen[5],
-                'passport_expiry': citizen[6],
-                'fonction': citizen[7],
-                'exit_date': citizen[8],
-                'entry_date': citizen[9],
-                'message_reference': citizen[10],
-                'address': citizen[11],
-                'vehicle_type': citizen[12],
-                'plate_number': citizen[13],
-                'observations': citizen[14],
-                'created_at': citizen[15],
-                'msg_ref': citizen[16]
-            }
-            return jsonify(citizen_data), 200
-        else:
-            return jsonify({'message': 'Citizen not found'}), 404
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+            c.*,
+            cdl.dep_msg_ref,
+            cdl.departure_time  
+        FROM 
+            citizens c
+        LEFT JOIN 
+            citizen_departure_logs cdl
+        ON 
+            c.id = cdl.citizen_id
+        WHERE 
+            cdl.citizen_id IS NULL
+        AND 
+        c.exit_date > DATE_SUB(CURDATE(), INTERVAL 2 MONTH);
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"msg": "Error fetching citizens still in the city", "error": str(e)}), 500
+
+@citizens_bp.route('/api/citizens/supposedToEnter', methods=['GET'])
+def get_citizens_supposedToEnter():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        c.*, 
+        cdl.dep_msg_ref,
+        cdl.departure_time 
+        FROM 
+        citizens c
+        LEFT JOIN 
+        citizen_departure_logs cdl 
+        ON 
+        c.id = cdl.citizen_id
+        WHERE 
+        cdl.citizen_id IS NULL
+        AND 
+        c.exit_date <= DATE_SUB(CURDATE(), INTERVAL 2 MONTH);
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching citizens out for two months or more", "error": str(e)}), 500
+
+@citizens_bp.route('/api/citizens/history', methods=['GET'])
+def get_citizens_history():
+    try:
+        cursor = mysql.connection.cursor()
+        
+        query = """
+        SELECT 
+        c.*,
+        cdl.dep_msg_ref,
+        cdl.departure_time   
+        FROM 
+        citizens c
+        INNER JOIN 
+        citizen_departure_logs cdl 
+        ON 
+        c.id = cdl.citizen_id
+        """
+        cursor.execute(query)
+        non_residents = cursor.fetchall()
+        
+        # Format the result as a single list of records
+        result = [list(row) for row in non_residents]
+        
+        cursor.close()
+        return jsonify(result), 200  # Directly return the list
+
+    except Exception as e:
+        return jsonify({"msg": "Error fetching non_residents ", "error": str(e)}), 500
 
 # Add a new citizen
 @citizens_bp.route('/api/citizens/add', methods=['POST'])
@@ -75,13 +151,13 @@ def add_citizen():
         cur.execute("""
             INSERT INTO citizens (
                 first_name, last_name, date_of_birth, place_of_birth, passport_number,
-                passport_expiry, fonction, exit_date, entry_date, message_reference,
+                passport_expiry, fonction, exit_date, 
                 address, vehicle_type, plate_number, observations, msg_ref
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,  %s, %s, %s, %s)
         """, (
             data['first_name'], data['last_name'], data['date_of_birth'], data.get('place_of_birth'),
             data['passport_number'], data.get('passport_expiry'), data.get('fonction'), data['exit_date'],
-            data.get('entry_date'), data.get('message_reference'), data.get('address'), data.get('vehicle_type'),
+            data.get('address'), data.get('vehicle_type'),
             data.get('plate_number'), data.get('observations'), data.get('msg_ref')
         ))
         mysql.connection.commit()
@@ -96,27 +172,54 @@ def add_citizen():
 def update_citizen(id):
     data = request.json
     try:
+        # Initialize query and list for fields to update
         update_fields = []
         values = []
 
-        # Add each field if present in request
-        for field in ['passport_expiry', 'fonction', 'entry_date', 'message_reference', 'address', 'vehicle_type', 'plate_number', 'observations', 'msg_ref']:
-            if field in data:
-                update_fields.append(f"{field} = %s")
-                values.append(data[field])
+        # Check each field, and only add it to the query if it exists in the request data
+        if 'fonction' in data:
+            update_fields.append("fonction = %s")
+            values.append(data['fonction'])
 
+        if 'address' in data:
+            update_fields.append("address = %s")
+            values.append(data['address'])
+
+        if 'observations' in data:
+            # Fetch the current value of observations
+            cur = mysql.connection.cursor()
+            cur.execute("SELECT observations FROM citizens WHERE id = %s", (id,))
+            current_observations = cur.fetchone()
+            cur.close()
+
+            # Append the new observations to the existing ones
+            if current_observations and current_observations[0]:
+                updated_observations = current_observations[0] + " " + data['observations']
+            else:
+                updated_observations = data['observations']
+
+            update_fields.append("observations = %s")
+            values.append(updated_observations)
+
+        if 'msg_ref' in data:
+            update_fields.append("msg_ref = %s")
+            values.append(data['msg_ref'])
+
+        # If no fields are provided, return an error response
         if not update_fields:
             return jsonify({"error": "No fields provided for update"}), 400
 
+        # Join the fields with commas and add to the SQL statement
         query = f"UPDATE citizens SET {', '.join(update_fields)} WHERE id = %s"
-        values.append(id)
+        values.append(id)  # Add the ID to the values list for the WHERE clause
 
+        # Execute the query with the dynamic list of values
         cur = mysql.connection.cursor()
         cur.execute(query, tuple(values))
         mysql.connection.commit()
         cur.close()
 
-        return jsonify({'message': 'Citizen updated successfully!'}), 200
+        return jsonify({'message': 'citizens updated successfully!'}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -140,9 +243,10 @@ def get_citizens_monthly_counts():
     try:
         year = request.args.get('year')
 
-        if not year or not year.isdigit() or int(year) < 1900 or int(year) > datetime.now().year:
+        # Validate the year parameter
+        if not year or not year.isdigit() or int(year) < 2023 or int(year) > datetime.now().year + 1:
             return jsonify({"error": "Invalid year parameter. Please provide a valid year."}), 400
-        
+
         year = int(year)
 
         query = """
@@ -158,19 +262,26 @@ def get_citizens_monthly_counts():
         results = cur.fetchall()
         cur.close()
 
-        monthly_counts = {i: 0 for i in range(1, 13)}
-        total_count = 0
+        # Initialize the response structure for "Algerie"
+        monthly_counts = {m: 0 for m in range(1, 13)}  # Default all months to 0
+        grand_total = 0
 
+        # Process the results
         for row in results:
-            month = row[0]
-            count = row[1]
+            month, count = row
             monthly_counts[month] = count
-            total_count += count
+            grand_total += count
 
+        # Prepare the response data
         response_data = {
-            "year": year,
-            "monthly_counts": monthly_counts,
-            "total_count": total_count
+            "countries": [
+                {
+                    "nationality": "Algerie",
+                    "monthly_counts": [monthly_counts[month] for month in range(1, 13)],
+                    "total": grand_total
+                }
+            ],
+            "grand_total": grand_total
         }
 
         return jsonify(response_data), 200
@@ -179,77 +290,151 @@ def get_citizens_monthly_counts():
         return jsonify({"error": str(e)}), 500
 
 # Filter citizens by specific criteria
-@citizens_bp.route('/api/citizens/filter', methods=['GET'])
+@citizens_bp.route('/api/citizens/filter', methods=['POST'])
 def filter_citizens():
     try:
-        cur = mysql.connection.cursor()
-        
-        first_name = request.args.get('first_name')
-        last_name = request.args.get('last_name')
-        place_of_birth = request.args.get('place_of_birth')
-        passport_number = request.args.get('passport_number')
-        fonction = request.args.get('fonction')
-        msg_ref = request.args.get('msg_ref')
-        entry_date_start = request.args.get('entry_date_start')
-        entry_date_end = request.args.get('entry_date_end')
+        # Get JSON data from the request
+        data = request.get_json()
 
-        query = "SELECT * FROM citizens WHERE 1=1"
+        # Extract filter parameters
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        exit_date_start = data.get('exit_date_start')
+        exit_date_end = data.get('exit_date_end')
+        vehicle_type = data.get('vehicle_type')
+        place_of_birth = data.get('place_of_birth')
+        passport_number = data.get('passport_number')
+        msg_ref = data.get('msg_ref')
+
+        # Initialize SQL query
+        query = """
+            SELECT 
+                c.*,
+                cdl.dep_msg_ref,
+                cdl.departure_time
+            FROM 
+                citizens c
+            LEFT JOIN 
+                citizen_departure_logs cdl
+            ON 
+                c.id = cdl.citizen_id
+            WHERE 1=1
+        """
         filters = []
 
+        # Add filters to the query
         if first_name:
-            query += " AND first_name = %s"
+            query += " AND c.first_name = %s"
             filters.append(first_name)
 
         if last_name:
-            query += " AND last_name = %s"
+            query += " AND c.last_name = %s"
             filters.append(last_name)
 
         if place_of_birth:
-            query += " AND place_of_birth = %s"
+            query += " AND c.place_of_birth = %s"
             filters.append(place_of_birth)
 
-        if passport_number:
-            query += " AND passport_number = %s"
-            filters.append(passport_number)
-
-        if fonction:
-            query += " AND fonction = %s"
-            filters.append(fonction)
-
-        if msg_ref:
-            query += " AND msg_ref = %s"
-            filters.append(msg_ref)
-
-        if entry_date_start and entry_date_end:
+        if exit_date_start and exit_date_end:
             try:
-                entry_date_start = datetime.strptime(entry_date_start, '%Y-%m-%d').date()
-                entry_date_end = datetime.strptime(entry_date_end, '%Y-%m-%d').date()
-                query += " AND entry_date BETWEEN %s AND %s"
-                filters.extend([entry_date_start, entry_date_end])
+                exit_date_start = datetime.strptime(exit_date_start, '%Y-%m-%d').date()
+                exit_date_end = datetime.strptime(exit_date_end, '%Y-%m-%d').date()
+                query += " AND c.exit_date BETWEEN %s AND %s"
+                filters.extend([exit_date_start, exit_date_end])
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
+        if vehicle_type:
+            query += " AND c.vehicle_type LIKE %s"
+            filters.append(vehicle_type)
+
+        if passport_number:
+            query += " AND c.passport_number LIKE %s"
+            filters.append(f"%{passport_number}%")
+
+        if msg_ref:
+            query += " AND c.msg_ref = %s"
+            filters.append(msg_ref)
+
+        # Execute the query
+        cur = mysql.connection.cursor()
         cur.execute(query, tuple(filters))
         results = cur.fetchall()
 
-        if not results:
-            return jsonify({"message": "No citizens found matching the criteria"}), 404
-
-        column_names = [desc[0] for desc in cur.description]
-        citizens = [dict(zip(column_names, row)) for row in results]
-        total_count = len(citizens)
-        fonction_counts = Counter(citizen['fonction'] for citizen in citizens)
+        # Transform the results into a nested list
+        results_list = [list(row) for row in results]
 
         cur.close()
-
-        response_data = {
-            "total_citizens": total_count,
-            "fonction_counts": dict(fonction_counts),
-            "citizens": citizens
-        }
-
-        return jsonify(response_data), 200
+        return jsonify(results_list), 200  # Return the nested list
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@citizens_bp.route('/api/citizens/last-two', methods=['GET'])
+def get_last_two_non_residents():
+    try:
+        cur = mysql.connection.cursor()
+        
+        # Query to fetch the last two entries
+        query = """
+        SELECT 
+    c.*,
+    cdl.dep_msg_ref,
+    cdl.departure_time   
+FROM 
+    citizens c
+LEFT JOIN 
+    citizen_departure_logs cdl 
+ON 
+    c.id = cdl.citizen_id
+ORDER BY 
+    c.id DESC
+LIMIT 2;
+        """
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@citizens_bp.route('/api/citizens/add_departure_log', methods=['POST'])
+def add_departure_log():
+    data = request.json
+    
+    # Extract values from the request
+    citizen_id = data.get('citizen_id')
+    departure_method = data.get('observations')
+    departure_time = data.get('departure_time')
+    dep_msg_ref = data.get('dep_msg_ref')
+
+    # Ensure all required fields are provided
+    if not citizen_id :
+        return jsonify({"msg": "citizen_id  is required!"}), 400
+    
+    if not departure_method:
+         return jsonify({"msg": " departure_method is required!"}), 400
+
+    if not departure_time:
+         return jsonify({"msg": "departure_time is required!"}), 400
+    
+    try:
+        cursor = mysql.connection.cursor()
+        
+        # Insert data into non_resident_departure_logs table
+        insert_query = """
+            INSERT INTO citizen_departure_logs (citizen_id, departure_method, departure_time, dep_msg_ref)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (citizen_id, departure_method, departure_time, dep_msg_ref))
+        
+        # Commit the transaction
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"msg": "Departure log added successfully!"}), 201
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return jsonify({"msg": "Error adding departure log!", "error": str(e)}), 500
