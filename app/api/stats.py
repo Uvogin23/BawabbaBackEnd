@@ -77,7 +77,6 @@ def get_table_statistics(table_name):
     
 
 def get_citizens_statistics():
-
     try:
         # Get the current year and the previous year
         current_year = datetime.now().year
@@ -127,9 +126,8 @@ def get_overall_counts():
         # Define table names and their corresponding Arabic labels
         tables = {
             "diplomats": "الدبلوماسيون",
-            "algerian_tourists": "السياح الجزائريون",
             "tourists": "السياح الأجانب",
-            "diplomat_accompaniment": "المرافقون"
+            "non_residents": "حركات الدخول"
         }
 
         # Create a MySQL cursor
@@ -140,7 +138,10 @@ def get_overall_counts():
 
         # Loop through the tables and get the counts
         for table, label in tables.items():
-            query = f"SELECT COUNT(*) FROM {table}"
+            query = f"""
+            SELECT COUNT(*) FROM {table} 
+            WHERE arrival_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+        """
             cursor.execute(query)
             count = cursor.fetchone()[0]
             result[label] = count
@@ -356,8 +357,6 @@ def get_counts_current_year():
     queries = {
          "الدبلوماسيون": f"SELECT COUNT(*) FROM diplomats WHERE YEAR(arrival_date) = {current_year}",
         "السياح الأجانب": f"SELECT COUNT(*) FROM tourists WHERE YEAR(arrival_date) = {current_year}",
-        "السياح الجزائريون": f"SELECT COUNT(*) FROM algerian_tourists WHERE YEAR(arrival_date) = {current_year}",
-        "المرافقون": f"SELECT COUNT(*) FROM diplomat_accompaniment WHERE YEAR(arrival_date) = {current_year}",
         "الدخول": f"SELECT COUNT(*) FROM non_residents WHERE YEAR(arrival_date) = {current_year}",
         "الخروج": f"SELECT COUNT(*) FROM citizens WHERE YEAR(exit_date) = {current_year}"
     }
